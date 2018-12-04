@@ -12,21 +12,27 @@ status_dict = {
     'completed': -1,
     'in_work': 1,
     'false':0}
-
-def knn(x,algorithm = 'kd_tree'):
-    """
-    :param x: input ndarray of floats of shape [N,d1,d2,d3...dm]
-              where m is number of dimensions of vector,
-              N is total number of samples
-    :param algorithm:
-    :return:
-             distances of shape [N] - radius of hypersphere around point x
-             indices - array of indices of shape [N,d1,d2,...,dk,dk+1],
-             where k is number of neighbors.(first coord is just index of element.
-    """
-    nbrs = NearestNeighbors(n_neighbors=3, algorithm='kd_tree').fit(x)
-    distances, indices = nbrs.kneighbors(x)
-    return distances[:,-1], indices
+class WishartWHeight(object):
+    def __init__(self,feature_list,k,h):
+        uninit_clusters = np.full([len(feature_list),-1])
+        start_status = np.full([len(feature_list),-2])
+        self.feature_list = np.stack([uninit_clusters,start_status])
+        self.k = k
+        self.h = h
+    def knn(self,x,algorithm = 'kd_tree'):
+        """
+        :param x: input ndarray of floats of shape [N,d1,d2,d3...dm]
+                  where m is number of dimensions of vector,
+                  N is total number of samples
+        :param algorithm:
+        :return:
+                 distances of shape [N] - radius of hypersphere around point x
+                 indices - array of indices of shape [N,d1,d2,...,dk,dk+1],
+                 where k is number of neighbors.(first coord is just index of element.
+        """
+        nbrs = NearestNeighbors(n_neighbors=self.k, algorithm='kd_tree').fit(x)
+        distances, indices = nbrs.kneighbors(x)
+        return distances[:,-1], indices
 
 def sort_indices(values,neighbors):
     new_idx = np.argsort(values)
