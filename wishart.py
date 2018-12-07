@@ -88,67 +88,54 @@ class WishartWHeight(object):
             if idx % 10000 == 0:
                 print(idx)
             act_verts = np.not_equal(self.left_side[1][idx],2)
-            neighbor_status = self.left_side[0][idx][act_verts]
-            if neighbor_status.size == 0:
+            neighbor_verts = self.left_side[0][idx][act_verts]
+            if neighbor_verts.size == 0:
                 self.open_clusters[self.cur_cls] = [idx]
                 self.vert_clusters[idx] = self.cur_cls
                 self.status[idx] = status_dict['in_work']
                 self.cur_cls+=1
                 continue
-            classes = self.vert_clusters[neighbor_status]
-            updated_status = self.status[neighbor_status]
+            classes = self.vert_clusters[neighbor_verts]
+            updated_status = self.status[neighbor_verts]
             neighbor_status = np.stack([classes,updated_status])
-            neighbor_clusters = set(neighbor_status[0].flat)
-            if ((len(neighbor_clusters)==1) or
-                (len(neighbor_clusters)==2) and (0 in neighbor_clusters)):
-                if np.any(np.equal(neighbor_status[1],status_dict['in_work'])):
-                    #TODO fix try-except for checking zero in two-element set
-                    try:
-                        neighbor_clusters.remove(0)
-                    except:
-                        pass
-                    target = neighbor_clusters.pop()
+            if np.all(np.equal(neighbor_status[0], neighbor_status[0][0])):
+                if np.equal(neighbor_status[1][0], status_dict['in_work']):
                     self.status[idx] = status_dict['in_work']
-                    self.vert_clusters[idx] = target
-                    self.open_clusters[target].append(idx)
+                    self.vert_clusters[idx] = neighbor_status[0][0]
+                    self.open_clusters[neighbor_status[0][0]].append(idx)
                     continue
                 else:
                     self.status[idx] = status_dict['completed']
                     self.vert_clusters[idx] = 0
                     continue
             else:
-                if np.all(np.equal(neighbor_status[1],status_dict['completed'])):
+                uniq_cls,idxes = np.unique(neighbor_status[0],return_index=True)
+                uniq_sts = neighbor_status[1][idxes]
+                if np.all(np.equal(uniq_sts,status_dict['completed'])):
                     self.status[idx] = status_dict['completed']
                     self.vert_clusters[idx] = 0
-                elif (len(self.ready_clusters) > 1) or (self.vert_clusters[0] == 0):
-                    self.status[idx] = status_dict['completed']
-                    self.vert_clusters[idx] = 0
-                    # TODO delete normally-work around several repeated neighbors
-                    for x in neighbor_status.T[0]:
-                        if x[1] == status_dict['in_work']:
-                            try:
-                                cluster = np.array(self.open_clusters[x[0]])
-                            except:
-                                continue
-                            if significant(self.values[cluster],self.h):
-                                self.ready_clusters.append(cluster)
-                            del self.open_clusters[x[0]]
-                            self.status[cluster] = status_dict['completed']
-                # need to rewrite this part, left for speed evaluation purposes
                 else:
-                    for x in neighbor_status.T[0]:
+                    significance = []
+                    for i in range(len(uniq_cls)):
+                        target = uniq_cls[i]
+                        if uniq_sts[i] == status_dict['in_work']:
+                            cluster = np.array(self.open_clusters[])
+
+                    if (len(uniq_cls) > 1) or (uniq_cls[0] == 0):
                         self.status[idx] = status_dict['completed']
                         self.vert_clusters[idx] = 0
-                        if x[1] == status_dict['in_work']:
-                            try:
-                                cluster = np.array(self.open_clusters[x[0]])
-                            except:
-                                continue
-                            cluster = np.array(self.open_clusters[x[0]])
-                            if significant(self.values[cluster],self.h):
-                                self.ready_clusters.append(cluster)
-                            del self.open_clusters[x[0]]
-                            self.status[cluster] = status_dict['completed']
+                        for i in range(len(uniq_cls)):
+                            if uniq_sts[i] == status_dict['in_work']:
+                                cluster = np.array(self.open_clusters[uniq_sts[i]])
+                                if significant(self.values[cluster],self.h):
+                                    self.ready_clusters.append(cluster)
+                                else:
+                                    self.vert_clusters[cluster] = 0
+                                del self.open_clusters[uniq_sts[i]]
+                                self.status[cluster] = status_dict['completed']
+                # need to rewrite this part, left for speed evaluation purposes
+                else:
+
         for open_cluster in self.open_clusters:
             cluster = np.array(open_cluster)
             if significant(self.values[cluster], self.h):
