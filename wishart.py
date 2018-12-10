@@ -18,7 +18,7 @@ def p_density(values,k):
     density = k/(values * volume)
     return density
 
-def significant(cluster,thresh):
+def is_significant(cluster,thresh):
     max_val = np.max(cluster)
     min_val = np.min(cluster)
     res = abs(max_val-min_val)
@@ -35,6 +35,7 @@ def sort_indices(values, neighbors):
 
 
 class WishartWHeight(object):
+
     def __init__(self,feature_list,k,h):
         #uninit_clusters = np.full([len(feature_list),-1])
         #start_status = np.full([len(feature_list),-2])
@@ -70,6 +71,7 @@ class WishartWHeight(object):
         distances, indices = nbrs.kneighbors(x)
         return distances[:,-1], indices
 
+
     def left_right_split(self,indices):
         assert type(indices) is np.ndarray, \
         "expected array on input"
@@ -82,6 +84,15 @@ class WishartWHeight(object):
         status = np.where(filter_array,self.status,filler)
         self.left_side = np.stack([indices[:,1:],status])
         print(self.left_side.shape)
+
+
+    def is_significant(self, cluster_num, thresh):
+        inds = self.open_clusters[cluster_num]
+        vals = self.values[inds]
+        max_val = np.max(vals)
+        min_val = np.min(vals)
+        res = abs(max_val - min_val)
+        return res >= thresh
 
     def build_clusters(self):
         for idx in xrange(len(self.values)):
@@ -102,7 +113,7 @@ class WishartWHeight(object):
                 if np.equal(neighbor_status[1][0], status_dict['in_work']):
                     self.status[idx] = status_dict['in_work']
                     self.vert_clusters[idx] = neighbor_status[0][0]
-                    self.open_clusters[neighbor_status[0][0]].append(idx)
+                    self.open_clusters[classes[0][0]].append(idx)
                     continue
                 else:
                     self.status[idx] = status_dict['completed']
@@ -114,32 +125,68 @@ class WishartWHeight(object):
                 if np.all(np.equal(uniq_sts,status_dict['completed'])):
                     self.status[idx] = status_dict['completed']
                     self.vert_clusters[idx] = 0
+                elif uniq_cls[0] == 0:
+                    self.case_0(uniq_cls,uniq_sts)
+                    self.vert_clusters[idx] = 0
+                    self.status[idx] = status_dict['completed']
                 else:
-                    significance = []
+                    significance = np.zeros(len(uniq_cls), dtype=bool)
                     for i in range(len(uniq_cls)):
-                        target = uniq_cls[i]
-                        if uniq_sts[i] == status_dict['in_work']:
-                            cluster = np.array(self.open_clusters[])
-
-                    if (len(uniq_cls) > 1) or (uniq_cls[0] == 0):
-                        self.status[idx] = status_dict['completed']
+                        if uniq_sts[i] == status_dict['completed']:
+                            significance[i] = True
+                        else:
+                            significance[i] = self.is_significant(uniq_cls[i], self.h)
+                    if np.sum(significance) > 1:
+                        self.case_2(uniq_cls,uniq_sts,significance)
                         self.vert_clusters[idx] = 0
-                        for i in range(len(uniq_cls)):
-                            if uniq_sts[i] == status_dict['in_work']:
-                                cluster = np.array(self.open_clusters[uniq_sts[i]])
-                                if significant(self.values[cluster],self.h):
-                                    self.ready_clusters.append(cluster)
-                                else:
-                                    self.vert_clusters[cluster] = 0
-                                del self.open_clusters[uniq_sts[i]]
-                                self.status[cluster] = status_dict['completed']
-                # need to rewrite this part, left for speed evaluation purposes
-                else:
+                        self.status[idx] = status_dict['completed']
+                    else:
+                        self.case_1(uniq_cls,uniq_sts,significance)
+                        self.vert_clusters[idx] = uniq_cls[0]
+                        self.status[idx] = uniq_sts[0]
 
-        for open_cluster in self.open_clusters:
-            cluster = np.array(open_cluster)
-            if significant(self.values[cluster], self.h):
+    def case_0(self,indices,stats):
+        for i in range(1,len(indices)):
+            if stats[i] == status_dict['completed']:
+                continue
+            else:
+                significance = self.is_significant(indices[i],self.h)
+            cluster = self.open_clusters[indices[i]]
+            cluster_arr = np.array(cluster)
+            if not significance:
+                self.vert_clusters[cluster_arr] = 0
+                del self.open_clusters[indices[i]]
+            else:
                 self.ready_clusters.append(cluster)
+            self.status[cluster_arr] = status_dict['completed']
+
+
+    def case_2(self,indices,stats,sign):
+        for i in range(len(indices)):
+            if stats[i] == status_dict['completed']:
+                continue
+            cluster = self.open_clusters[indices[i]]
+            cluster_arr = np.array(cluster)
+            if not sign[i]:
+                self.vert_clusters[cluster_arr] = 0
+                del self.open_clusters[indices[i]]
+            else:
+                self.ready_clusters.append(cluster)
+            self.status[cluster_arr] = status_dict['completed']
+
+
+    def case_1(self,indices,stats,sign):
+        for i in range(1,len(indices)):
+            cluster = self.open_clusters[indices[i]]
+            cluster_arr = np.array(cluster)
+            self.vert_clusters[cluster_arr] = indices[0]
+            self.status[cluster_arr] = stats[0]
+            self.open_clusters[indices[0]] += cluster
+            del self.open_clusters[indices[i]]
+
+
+
+
 
 
 
@@ -171,7 +218,18 @@ def reorder_case_1(n_list,cluster_list,thresh):
     to_finalize_list = np.select(n_list[0], to_finalize[select_list])
     return 0, to_remove_list , to_finalize_list
 
-def reorder_case_2(n_list,cluster_list,thresh):
+                    if (len(uniq_cls) > 1) or (uniq_cls[0] == 0):
+                        self.status[idx] = status_dict['completed']
+                        self.vert_clusters[idx] = 0
+                        for i in range(len(uniq_cls)):
+                            if uniq_sts[i] == status_dict['in_work']:
+                                cluster = np.array(self.open_clusters[uniq_sts[i]])
+                                if significant(self.values[cluster],self.h):
+                                    self.ready_clusters.append(cluster)
+                                else:
+                                    self.vert_clusters[cluster] = 0
+                                del self.open_clusters[uniq_sts[i]]
+                                self.status[cluster] = status_dict['completed']
 """
 
 
