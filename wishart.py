@@ -7,14 +7,14 @@ from sklearn.neighbors import NearestNeighbors
 import numpy as np
 
 status_dict = {
-    'filler':2,
+    'filler': 2,
     'undefined': -2,
     'completed': -1,
     'in_work': 1,
-    'false':0}
+    'false': 0}
 
 def p_density(values,k):
-    volume = np.pi ** (k/2) / sp.gamma(k/2 +1)
+    volume = np.pi ** (k/2) / sp.gamma(k/2 + 1)
     density = k/(values * volume)
     return density
 
@@ -43,8 +43,9 @@ class WishartWHeight(object):
         self.k = k
         self.h = h
         self.open_clusters = {}
-        self.ready_clusters = []
+        self.ready_clusters = {}
         self.cur_cls = 1
+        self.merge_counter = 0
         start_time = time.time()
         radii,indices = self.knn(feature_list)
         sort_st_time = time.time()
@@ -54,6 +55,7 @@ class WishartWHeight(object):
         self.values = p_density(radii,self.k)
         self.left_right_split(indices)
         print('initialization finished. total time elapsed: {:.2f} s').format(time.time()-start_time)
+        median = np.median(self.values)
 
 
     def knn(self,x,algorithm = 'kd_tree'):
@@ -144,6 +146,7 @@ class WishartWHeight(object):
                         self.case_1(uniq_cls,uniq_sts,significance)
                         self.vert_clusters[idx] = uniq_cls[0]
                         self.status[idx] = uniq_sts[0]
+                        self.open_clusters[uniq_cls[0]].append(idx)
 
     def case_0(self,indices,stats):
         for i in range(1,len(indices)):
@@ -157,9 +160,18 @@ class WishartWHeight(object):
                 self.vert_clusters[cluster_arr] = 0
                 del self.open_clusters[indices[i]]
             else:
-                self.ready_clusters.append(cluster)
+                self.ready_clusters[indices[i]] = cluster
             self.status[cluster_arr] = status_dict['completed']
 
+    def case_1(self,indices,stats,sign):
+        self.merge_counter+=1
+        for i in range(1,len(indices)):
+            cluster = self.open_clusters[indices[i]]
+            cluster_arr = np.array(cluster)
+            self.vert_clusters[cluster_arr] = indices[0]
+            self.status[cluster_arr] = stats[0]
+            self.open_clusters[indices[0]] += cluster
+            del self.open_clusters[indices[i]]
 
     def case_2(self,indices,stats,sign):
         for i in range(len(indices)):
@@ -171,18 +183,9 @@ class WishartWHeight(object):
                 self.vert_clusters[cluster_arr] = 0
                 del self.open_clusters[indices[i]]
             else:
-                self.ready_clusters.append(cluster)
+                self.ready_clusters[indices[i]] = cluster
             self.status[cluster_arr] = status_dict['completed']
 
-
-    def case_1(self,indices,stats,sign):
-        for i in range(1,len(indices)):
-            cluster = self.open_clusters[indices[i]]
-            cluster_arr = np.array(cluster)
-            self.vert_clusters[cluster_arr] = indices[0]
-            self.status[cluster_arr] = stats[0]
-            self.open_clusters[indices[0]] += cluster
-            del self.open_clusters[indices[i]]
 
 
 
